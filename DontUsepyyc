@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+#
+# A shell script to call your compiler. Please edit as you like to invoke
+# your compiler in the appropriate way.
+#
+# This script needs to be able to take one argument with the path to the
+# input Python file and produce a file containing the output x86 file,
+# except that the suffix should be replaced with the .s suffix. For example,
+# executing
+#
+# $ ./pyyc tests/test1.py
+#
+# should create an x86 assembly file tests/test1.s.
+
+# THIS_DIR is bound to the directory that this script file is in.
+THIS_DIR=$(dirname $(realpath $0))
+
+# Example: A python script called compile.py in this directory is passed
+# the arguments that are passed to this script.
+python ${THIS_DIR}/compile.py $*

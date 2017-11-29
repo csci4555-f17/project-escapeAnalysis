@@ -1,0 +1,23 @@
+program ::= module
+module ::= simple_statement+
+simple_statement ::= "print" expression | name "=" expression | expression
+key_datum ::= expression ":" expression
+subscription ::= expression "[" expression "]"
+expression ::= name 
+ 	     | decimalinteger 
+             | "-" expression 
+             | expression "+" expression 
+             | "(" expression ")" 
+             | "input" "(" ")" 
+             | "True" | "False" 
+             | "not" expression             | expression "and" expression             | expression "or" expression             | expression "==" expression             | expression "!=" expression             | expression "if" expression "else" expression             | "[" expr_list "]"             | "{" key_datum_list "}"             | subscription             | expression "is" expression
+expr_list ::= epsilon 	     | expression	     | expression "," expr_list 
+key_datum_list ::= epsilon	     | key_datum             | key_datum "," key_datum_list
+
+#Note target might be the same as name in the P0 grammar. Likewise to identifier
+target ::= identifier             | subscriptionsimple_statement ::= target "=" expression
+
+
+
+
+                                                
