@@ -3,7 +3,7 @@ class Live():
         self.x86Statement = x86Statement
         self.liveSet = set()
         self.listOfLiveSet = []
-            #parse takes x86 statement where statement is a list of tokens and continually builds the interference graph
+    #parse takes x86 statement where statement is a list of tokens and continually builds the interference graph
     def parse(self,tokenList):
         #Do nothing to the set for call input. Move eax into liveset & G
         if tokenList[0] == 'call':
@@ -47,7 +47,7 @@ class Live():
         self.listOfLiveSet.append(self.liveSet)
 
     def driver(self):
-        for i in range(len(self.x86Statement)-1,0,-1):
+        for i in range(len(self.x86Statement)-1, -1, -1):
             #print self.x86Statement[i]
             self.parse(self.x86Statement[i])
         l = list()

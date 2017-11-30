@@ -275,7 +275,7 @@ class pyCompiler():
         #Lex each line and turn it into sublists of tokens
         l = []
         for i in range(0,len(x86Statement)):
-            regexStr = re.sub(',','',x86Statement[i])
+            regexStr = re.sub(',', '', x86Statement[i])
             l.append(regexStr.split())
 
         #Create live object

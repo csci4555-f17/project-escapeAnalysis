@@ -1,12 +1,41 @@
 import compiler
 from compiler.ast import *
 from explicate import Bool
+from uniquify import *
 
 connectionGraph = {}
-globalVars = {"inAssign": False}
+globalVars = {"inAssign": False, "objectCounter": 0, "inClass": False}
+classNamesToAttributes = {}
 nameList = [{}]
 functionClassNameList = []
 nameCounter = 0
+
+def addToConnectionGraph(varName, val):
+    if isinstance(val, Const):
+        val = val.value
+    if varName in connectionGraph and val not in connectionGraph[varName]:
+        if isinstance(val, list):
+            connectionGraph[varName].extend(val)
+        else:
+            connectionGraph[varName].append(val)
+    else:
+        connectionGraph[varName] = [val]
+    print connectionGraph
+
+def createNewInstance(obj):
+    name = obj + "_" + str(globalVars["objectCounter"])
+    if name not in connectionGraph:
+        connectionGraph[name] = []
+    return name
+
+def createNewAttributeInstances(attributes):
+    returnList = []
+    for pair in attributes:
+        tmpName = pair[0] + "_" + str(globalVars["objectCounter"])
+        returnList.append(tmpName)
+        addToConnectionGraph(tmpName, pair[1])
+        
+    return returnList
 
 def escapify(n):
     global nameDictionary
@@ -39,12 +68,17 @@ def escapify(n):
         return Add((lft, rgt))
 
     elif isinstance(n, CallFunc):
-        name = escapify(n.node)
+        # If we're creating a class.
+        if n.node.name in classNamesToAttributes:
+            if globalVars["inAssign"] != False:
+                varName = globalVars["inAssign"]
+                newName = createNewInstance(n.node.name)
+                addToConnectionGraph(varName, newName)
+                newAttributes = createNewAttributeInstances(classNamesToAttributes[n.node.name])
+                addToConnectionGraph(newName, newAttributes)
+                globalVars["objectCounter"] += 1
 
-        if globalVars["inAssign"] != False:
-            varName = globalVars["inAssign"]
-            connectionGraph[varName] = name.name
-        
+        name = escapify(n.node)
         args = []
         for i in range(0,len(n.args)):
             val = escapify(n.args[i])
@@ -59,7 +93,14 @@ def escapify(n):
         return Printnl(escapifiedPrintStmt,None)
 
     elif isinstance(n, Assign):  
-        globalVars["inAssign"] = n.nodes[0].name     
+        if isinstance(n.nodes[0], AssName):
+            globalVars["inAssign"] = n.nodes[0].name
+            if globalVars["inClass"] != False:
+                classNamesToAttributes[globalVars["inClass"]].append([n.nodes[0].name, n.expr])
+        elif isinstance(n.nodes[0], AssAttr):
+            globalVars["inAssign"] = n.nodes[0].expr.name
+        else:
+            raise Exception("In Assign node. Hit unhandled node case.")
         nodes = escapify(n.nodes[0])
         val = escapify(n.expr)
         globalVars["inAssign"] = False
@@ -87,8 +128,7 @@ def escapify(n):
         if globalVars["inAssign"] != False:
             removedConstNodes = list(map(lambda x: x.value, nodes))
             varName = globalVars["inAssign"]
-            connectionGraph[varName] = removedConstNodes
-            print connectionGraph
+            addToConnectionGraph(varName, removedConstNodes)
 
         return List(nodes) if len(nodes) is not 0 else List(())
 
@@ -105,9 +145,18 @@ def escapify(n):
         return Return(escapify(n.value))
 
     elif isinstance(n, Class):
-        return Class(n.name, n.bases, n.doc, escapify(n.code))
+        globalVars["inClass"] = n.name
+        if n.name not in classNamesToAttributes:
+            classNamesToAttributes[n.name] = []
+        code = escapify(n.code)
+        globalVars["inClass"] = False
+        return Class(n.name, n.bases, n.doc, code)
         
     elif isinstance(n, AssAttr):
+        if globalVars["inAssign"] != False:
+            varName = globalVars["inAssign"]
+            addToConnectionGraph(varName, n.attrname)
+
         return n
 
     elif isinstance(n, Getattr):
@@ -120,6 +169,7 @@ def escapify(n):
         return While(n.test, escapify(n.body), escapify(n.else_))
 
 ast = compiler.parseFile("/Users/rb/GoogleDrive/School/Dropbox/CSCI4555/project-escapeAnalysis/mytests/test16.py")
+uniquifiedAST = uniquify(ast)
 
-print "Orig: "+str(ast)
-print "Escp: "+str(escapify(ast))
+print "Orig: "+str(uniquifiedAST)
+print "Escp: "+str(escapify(uniquifiedAST))
