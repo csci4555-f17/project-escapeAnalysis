@@ -9,6 +9,6 @@ Please make sure to include all your sources (e.g., LaTeX for your paper, code f
 Then, link your documents here:
 
 - [Proposal](Proposal.pdf)
-- [Status Update](statusUpdate.docx)
-- [Presentation](presentation/presentation.pdf)
+- [Status Update](StatusUpdate.pdf)
+- [Presentation (Doesn't exist yet)](presentation/presentation.pdf)
 - [Paper](ResearchOnEscapeAnalysis.pdf)
