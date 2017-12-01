@@ -99,6 +99,9 @@ def escapify(n):
                 classNamesToAttributes[globalVars["inClass"]].append([n.nodes[0].name, n.expr])
         elif isinstance(n.nodes[0], AssAttr):
             globalVars["inAssign"] = n.nodes[0].expr.name
+            print classNamesToAttributes
+            #classNamesToAttributes[]
+
         else:
             raise Exception("In Assign node. Hit unhandled node case.")
         nodes = escapify(n.nodes[0])
@@ -153,9 +156,11 @@ def escapify(n):
         return Class(n.name, n.bases, n.doc, code)
         
     elif isinstance(n, AssAttr):
+
         if globalVars["inAssign"] != False:
             varName = globalVars["inAssign"]
-            addToConnectionGraph(varName, n.attrname)
+            tmp = connectionGraph[varName][0]
+            addToConnectionGraph(tmp, n.attrname)
 
         return n
 
