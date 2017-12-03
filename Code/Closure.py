@@ -1,6 +1,7 @@
 import compiler
 from compiler.ast import *
 from free_vars import *
+from Declassify import CreateClass, Setattr
 
 #Closure map. A dict mapping function names to its free vars
 closureMap = {}
@@ -34,6 +35,23 @@ class FunctionLift():
         self.expr = e
     def __repr__(self):
         return 'FunctionLift(%s)' % (self.expr)
+class LambdaHelper():
+    def __init__(self, name, _lambda):
+        self.name = name
+        self.lambda_ = _lambda
+    def __repr__(self):
+        return 'LambdaHelper(%s, %s)' % (self.name, self.lambda_)
+class GetFunction():
+    def __init__(self, function):
+        self.function = function
+    def __repr__(self):
+        return 'GetFunction(%s)' % (self.function)
+
+class GetReceiver():
+    def __init__(self, receiver):
+        self.receiver = receiver
+    def __repr__(self):
+        return 'GetReceiver(%s)' % (self.receiver)
 
 def requestLambdaVarName():
     name = LAMBDA+str(lambdaCounter[0])
@@ -83,6 +101,9 @@ def closure(expr):
             p = popFree()
             closureMap[functionName] = p
             return CallFunc(GetFunPtr(Name(functionName)), [GetFreeVar(Name(functionName))]+expr.args, None, None)
+        elif case(expr.node, Getattr):
+            return CallFunc(GetFunPtr(GetFunction(expr.node)), [GetFreeVar(GetFunction(expr.node)), GetReceiver(expr.node)]+expr.args ,None,None)
+
         return CallFunc(GetFunPtr(Name(expr.node.name)), [GetFreeVar(Name(expr.node.name))]+expr.args, None, None)
     elif case(expr, Module):
         return Module(None, closure(expr.node))
@@ -93,26 +114,20 @@ def closure(expr):
         h = map(lambda x: closure(x), expr.nodes)
         return Printnl(h, None)
     elif case(expr, Assign):
-        val = closure(expr.expr)
         nodes = closure(expr.nodes[0])
         if case(expr.expr, Lambda):
-            functionName = val.function
-            p = popFree()
-            closureMap[functionName] = p
-            closureMap[nodes.name] = p
-
-            val = CreateClosure(functionName, list(closureMap[functionName]))
-
-        return Assign([nodes],val)
+            if case(nodes, AssAttr):
+                clos = closure(LambdaHelper(Name(nodes.expr.name), expr.expr))
+                return Assign([nodes], clos)
+            clos = closure(LambdaHelper(Name(nodes.name), expr.expr))
+            return Assign([nodes], clos)
+        else:
+            val = closure(expr.expr)
+            return Assign([nodes],val)
     elif case(expr, AssName):
         return expr
     elif case(expr, Discard):
         val = closure(expr.expr)
-        if case(expr.expr, Lambda):
-            p = popFree()
-            closureMap[val.nodes[0].name] = p
-            Sequence(FunctionLift(val)) #Capture function and replace it with a closure
-            val = CreateClosure(val.nodes[0].name, list(closureMap[val.nodes[0].name]))
         return Discard(val)
     elif case(expr, UnarySub):
         return UnarySub(closure(expr.expr))
@@ -125,60 +140,81 @@ def closure(expr):
     elif case(expr, Lambda):
         (free, bound) = free_vars(expr, set([]))
         pushFree(free)
-        name = requestFreeVarListName()
+
+        fvs = requestFreeVarListName()
+        lam = requestLambdaVarName()
+
         f = []
         i = 0
         for elem in free:
-            f.append( Assign([AssName(elem, 'OP_ASSIGN')], Subscript(Name(name), 'OP_APPLY', [Const(i)])) )
+            f.append( Assign([AssName(elem, 'OP_ASSIGN')], Subscript(Name(fvs), 'OP_APPLY', [Const(i)])) )
+            f.append( Assign([AssName(elem, 'OP_ASSIGN')], Subscript(Name(elem), 'OP_APPLY', [Const(0)])) )
             i += 1
-        expr.argnames = [name]+expr.argnames if expr.argnames != () else [name]
 
-        fname = requestLambdaVarName()
-        closureMap[fname] = free
+        body = Stmt(f+closure(expr.code).nodes)
+        expr.argnames = [fvs]+expr.argnames if expr.argnames != () else [fvs]
+        closureMap[lam] = free
+        #Construct Lambda
+        Sequence(FunctionLift(Assign([AssName(lam, 'OP_ASSIGN')], Lambda(expr.argnames, expr.defaults, expr.flags, body))))
+        #return closure
 
-        #Returnify. Need to explicaitiy search and return the last calculated node
-        exprCode = returnify(expr.code)
+        free = map(lambda x: List([Name(x)]), list(free))
+        return CreateClosure(lam, free)
 
-        Sequence(FunctionLift(Assign([AssName(fname, 'OP_ASSIGN')], Lambda(expr.argnames, expr.defaults, expr.flags, Stmt(f+[closure(exprCode)])))))
-        Sequence(Assign([AssName(fname, 'OP_ASSIGN')], CreateClosure(fname, list(free))))
-        return CreateClosure(fname, list(free))
-        # (free, bound) = free_vars(expr,set([]))
-        # pushFree(free)
-        # name = requestFreeVarListName()
-        # f = []
-        # i = 0
-        # for elem in free:
-        #     f.append( Assign([AssName(elem, 'OP_ASSIGN')], Subscript(Name(name), 'OP_APPLY', [Const(i)])) )
-        #     i += 1
-        # expr.argnames = [name]+expr.argnames if expr.argnames != () else [name]
-        #
-        # fname = requestLambdaVarName()
-        # closureMap[fname] = free
-        # return Assign([AssName(fname, 'OP_ASSIGN')], Lambda(expr.argnames, expr.defaults, expr.flags, Stmt(f+[closure(expr.code)])))
+    elif case(expr, LambdaHelper):
+        name = expr.name
+        expr = expr.lambda_
+
+        (free, bound) = free_vars(expr, set([]))
+
+        fvs = requestFreeVarListName()
+        lam = requestLambdaVarName()
+
+        f = []
+        i = 0
+        for elem in free:
+            f.append( Assign([AssName(elem, 'OP_ASSIGN')], Subscript(Name(fvs), 'OP_APPLY', [Const(i)])) )
+            f.append( Assign([AssName(elem, 'OP_ASSIGN')], Subscript(Name(elem), 'OP_APPLY', [Const(0)])) )
+            i += 1
+
+        body = Stmt(f+closure(expr.code).nodes)
+        expr.argnames = [fvs]+expr.argnames if expr.argnames != () else [fvs]
+        closureMap[name.name] = free
+        #Construct Lambda
+        Sequence(FunctionLift(Assign([AssName(name.name, 'OP_ASSIGN')], Lambda(expr.argnames, expr.defaults, expr.flags, body))))
+        #return closure
+        free = map(lambda x: List([Name(x)]), list(free))
+        return CreateClosure(name.name, free)
+
     elif case(expr, Function):
-        #Find free vars
-        (free, bound) = free_vars(expr,set([]))
-        name = requestFreeVarListName()
-        fname = requestLambdaVarName()
+        (free, bound) = free_vars(expr, set([]))
+        fvs = requestFreeVarListName()
+        lam = requestLambdaVarName()
+        #Add subscript free vars in body
         f = []
         i = 0
-        #add statements to get free vars
-        for elem in free:
-            f.append( Assign([AssName(elem, 'OP_ASSIGN')], Subscript(Name(name), 'OP_APPLY', [Const(i)])) )
-            i += 1
-        body = closure(expr.code)
-        recursiveClosure = [Assign([AssName(expr.name, 'OP_ASSIGN')], CreateClosure(fname, list(free)))]
-        body = Stmt(f+recursiveClosure+body.nodes)
-        expr.argnames = [name]+expr.argnames if expr.argnames != () else [name]
-
-        #Connect name with free set
-        closureMap[fname] = free
         closureMap[expr.name] = free
-        #Map lambda name with the function body
-        Sequence( FunctionLift(Assign([AssName(fname, 'OP_ASSIGN')], Lambda(expr.argnames, expr.defaults, expr.flags, body ))) )
+        free = map(lambda x: List([Name(x)]), list(free))
+        for elem in free:
+            f.append( Assign([AssName(elem, 'OP_ASSIGN')], Subscript(Name(fvs), 'OP_APPLY', [Const(i)])) )
+            f.append( Assign([AssName(elem, 'OP_ASSIGN')], Subscript(Name(elem), 'OP_APPLY', [Const(0)])) )
+            i += 1
 
-        #Assign original function name to closure
-        return Assign([AssName(expr.name, 'OP_ASSIGN')], CreateClosure(fname, list(free)))
+        #append a recursive reference in the function
+        recursiveRef = [Assign([AssName(expr.name, 'OP_ASSIGN')], CreateClosure(lam, free))]
+        body = Stmt(f+recursiveRef+closure(expr.code).nodes)
+
+        expr.argnames = [fvs]+expr.argnames if expr.argnames != () else [fvs]
+        #Construct lambda
+        Sequence(FunctionLift(Assign([AssName(lam, 'OP_ASSIGN')], Lambda(expr.argnames, expr.defaults, expr.flags, body))))
+
+
+
+        #return closure
+
+        return Assign([AssName(expr.name, 'OP_ASSIGN')], CreateClosure(lam, free))
+
+
     elif case(expr, Return):
         return Return(closure(expr.value))
     elif case(expr, Or):
@@ -212,6 +248,18 @@ def closure(expr):
         then = closure(expr.tests[0][1])
         else_ = closure(expr.else_)
         return If([(test,then)], else_)
+    elif case(expr, While):
+        test = closure(expr.test)
+        body = closure(expr.body)
+        return While(test, body, None)
+    elif case(expr, CreateClass):
+        return expr
+    elif case(expr, Setattr):
+        return Setattr(expr.tmp, expr.name, closure(expr.expr))
+    elif case(expr, Getattr):
+        return expr
+    elif case(expr, AssAttr):
+        return AssAttr(closure(expr.expr), expr.attrname, expr.flags)
     else:
         print "closure experienced an unknown node called: "+str(expr)
         return None
@@ -222,18 +270,7 @@ def liftFunction(expr):
     elif case(expr, Stmt):
         return Stmt(promotionStmt+expr.nodes)
 
-def returnify(expr):
-    last = expr.nodes[0]
-    for node in expr.nodes:
-        if case(node, Name) or case(node, Assign):
-            last = expr.nodes[0]
-    if case(last, Name):
-        last = Return(last)
-    elif case(last, Assign):
-        name = Name(last.nodes[0].name)
-        last = Return(name)
 
-    return Stmt( expr.nodes + [last] )
 
 # ast = compiler.parseFile("/Users/michaeltang/Desktop/xfc.py")
 # print close(ast)

@@ -1,6 +1,7 @@
 import compiler
 from compiler.ast import *
 from free_vars import *
+from Declassify import CreateClass, Setattr
 
 def case(expr, Node):
     return isinstance(expr, Node)
@@ -57,13 +58,15 @@ def heapify(expr):
         operator = expr.ops[0][0] #Operator can be ==, !=, is
         return Compare(lft,[(operator,rgt)])
     elif case(expr, Lambda):
+        rtn = Lambda(expr.argnames, expr.defaults, expr.flags, heapify(expr.code))
         (free, bound) = free_vars(expr,set([]))
-        heapMeh |= free
-        return Lambda(expr.argnames, expr.defaults, expr.flags, heapify(expr.code))
+        heapMeh = (heapMeh | free) - bound
+        return rtn
     elif case(expr, Function):
+        rtn = Function(expr.decorators, expr.name, expr.argnames, expr.defaults, expr.flags, expr.doc, heapify(expr.code))
         (free, bound) = free_vars(expr,set([]))
-        heapMeh |= free
-        return Function(expr.decorators, expr.name, expr.argnames, expr.defaults, expr.flags, expr.doc, heapify(expr.code))
+        heapMeh = (heapMeh | free) - bound
+        return rtn
     elif case(expr, Return):
         return Return(heapify(expr.value))
     elif case(expr, Or):
@@ -98,7 +101,17 @@ def heapify(expr):
         else_ = heapify(expr.else_)
         return If([(test,then)], else_)
     elif case(expr, While):
-        print expr.test
+        test = heapify(expr.test)
+        body = heapify(expr.body)
+        return While(test, body, None)
+    elif case(expr, CreateClass):
+        return expr
+    elif case(expr, Setattr):
+        return Setattr(expr.tmp, expr.name, heapify(expr.expr))
+    elif case(expr, Getattr):
+        return expr
+    elif case(expr, AssAttr):
+        return AssAttr(heapify(expr.expr), expr.attrname, expr.flags)
     else:
         print "heapify experienced an unknown node called: "+str(expr)
         return None
@@ -131,6 +144,8 @@ def transform(expr):
         return Printnl(h, None)
     elif case(expr, Assign):
         if case(expr.nodes[0], Subscript):
+            return Assign([transform(expr.nodes[0])], transform(expr.expr))
+        elif case(expr.nodes[0], AssAttr):
             return Assign([transform(expr.nodes[0])], transform(expr.expr))
         lvalue = expr.nodes[0].name
         if lvalue in heapMeh:
@@ -187,6 +202,19 @@ def transform(expr):
         then = transform(expr.tests[0][1])
         else_ = transform(expr.else_)
         return If([(test,then)], else_)
+    elif case(expr, While):
+        test = transform(expr.test)
+        body = transform(expr.body)
+        return While(test, body, None)
+    elif case(expr, CreateClass):
+        return expr
+    elif case(expr, Setattr):
+        return Setattr(expr.tmp, expr.name, transform(expr.expr))
+    elif case(expr, Getattr):
+        return expr
+    elif case(expr, AssAttr):
+        return AssAttr(transform(expr.expr), expr.attrname, expr.flags)
+
     else:
         print "heapify experienced an unknown node called: "+str(expr)
         return None

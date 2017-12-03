@@ -9,10 +9,40 @@ varNameCounter = [0]
 stackLocation = [1]
 #Map between variable names and their location on the stack
 varMap = {}
+# Dict to map function name to free vars set
+freeMap = {}
+# Dict to map fuction name to bound vars set
+boundMap = {}
+# Doct to map function name to its arg list
+argMap = {}
+# Counter to count function depth
+statementsLeftInFunction = 0
+# Counter for the depth of nested functions.
+nestedFunctionDepth = 0
+# Dict to map a function's name to its stmt list
+functionNameToStmtsMap = {}
 # Name of the current function.
 currentFunctionName = [None]
+# Bool to see if we're in a Lambda.
+inLambda = False
+# Bool to see if we're in a class.
+inClass = False
+# String to keep track of if we're in an if, and if so, if we're in tests or else_
+inIf = "False"
+# List for current Lambda stmt list
+lambdaStmtList = []
+# List for current class stmts
+classStmtList = []
+# List for If tests stmts
+ifTestsStmtList = []
+# List for If else_ stmts
+ifElse_StmtList = []
 # Bool to see if we're in a function.
 inFunction = False
+# Bool to see if we're in a while
+inWhile = False
+# List for while stmts
+whileStmtList = []
 
 #Michael definition (Sequence Point AST operation):
 #A moment in time of the evaluation of the ast
@@ -21,6 +51,16 @@ inFunction = False
 
 #Statement list to control the sequence of assignment under flatten
 flatStatements = []
+
+def appendNestedFunction(name):
+    global nestedFunctionDepth
+    nestedFunctionDepth += 1
+    currentFunctionName.append(name)
+
+def popNestedFunction():
+    global nestedFunctionDepth
+    nestedFunctionDepth -= 1
+    return currentFunctionName.pop()
 
 def requestTmpVarName():
     #Make a new name
@@ -41,7 +81,9 @@ def case(expr, Class):
 
 def flatten(expr):
     # Making counters global.
-    global currentFunctionName, classStmtList, inFunction
+    global statementsLeftInFunction, nestedFunctionDepth, currentFunctionName, \
+    functionNameToStmtsMap, lambdaStmtList, inLambda, inClass, classStmtList, ifTestsStmtList, \
+    ifElse_StmtList, inWhile, whileStmtList, inFunction
     # ------------------ Start of P0 nodes ------------------
 
     #Const
@@ -178,7 +220,13 @@ def flatten(expr):
     # CallFunc case in P0... need to be refactored?
 
     elif case(expr, Function):
+        appendNestedFunction(expr.name)
+        functionNameToStmtsMap[currentFunctionName[nestedFunctionDepth]] = []
+        inFunction = True
         code = flatten(expr.code)
+        inFunction = False
+        popNestedFunction()
+        #nestedFunctionDepth -= 1
         Sequence(Function(expr.decorators, expr.name, expr.argnames, expr.defaults, \
         expr.flags, expr.doc, code))
 
@@ -186,10 +234,19 @@ def flatten(expr):
     #Lambda
     elif case(expr, Lambda):
         flatStatements.append([])
+        inLambda = True
         flatCode = flatten(expr.code)
+        inLambda = False
         tmpFlatStatements = flatStatements[len(flatStatements) - 1]
+        print tmpFlatStatements
         flatStatements.pop()
-        return Lambda(expr.argnames, expr.defaults, expr.flags, Stmt(tmpFlatStatements))
+        tmpLambdaStmtList = lambdaStmtList
+        lambdaStmtList = []
+        tmpLambdaStmtList = tmpLambdaStmtList + tmpFlatStatements
+        if tmpLambdaStmtList == []:
+            return Lambda(expr.argnames, expr.defaults, expr.flags, Stmt([flatCode] + tmpLambdaStmtList))
+        else:
+            return Lambda(expr.argnames, expr.defaults, expr.flags, Stmt(tmpLambdaStmtList))
 
     #Return
     elif case(expr, Return):
@@ -199,8 +256,12 @@ def flatten(expr):
     # ------------------ START of P3 nodes -------------------------
 
     elif case(expr, Class):
+        inClass = True
         flatCode = flatten(expr.code)
-        Sequence(Class(expr.name, expr.bases, expr.doc, flatCode))
+        inClass = False
+        tmpClassStmtList = classStmtList
+        classStmtList = []
+        Sequence(Class(expr.name, expr.bases, expr.doc, Stmt(tmpClassStmtList)))
 
     elif case(expr, AssAttr):
         # Already done in Assign?
@@ -223,14 +284,8 @@ def flatten(expr):
             else_ = None
         Sequence(While(expr.test, body, else_))
 
+
     # ------------------ End of P3 nodes -------------------------
 
     else:
         raise Exception("Flatten caught an unexpected node: "+str(expr))
-
-'''
-ast = compiler.parseFile("/Users/rb/GoogleDrive/School/Dropbox/CSCI4555/pyyc-foomybar/mytests/test16.py")
-
-print "Orig: "+str(ast)
-print "Flat: "+str(flatten(ast))
-'''

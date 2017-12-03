@@ -8,9 +8,11 @@ stackFrame = {}
 closureMap = {}
 
 
-#Jmp and Short
+#Jmp and Short and While
 jmp = -1
 short = -1
+while_ = -1
+depth = [0]
 
 currentStackFrame = "main"
 varMap = {"main":{}}
@@ -20,6 +22,10 @@ argMap = {"main":{}}
 
 #Map functions to its free vars
 freeMap = {"main":[]}
+
+#Map asciz to attribute char* in classes
+stringMap = {"__init__":"__init__"}
+
 
 #Request a stack location for a given scope
 def requestStackLocationFor(varName):
@@ -50,6 +56,12 @@ def requestShortNumber():
     global short
     short += 1
     return short
+
+#Helpfer function giving unique numbers for jump statements for while loops
+def requestWhileNumber():
+    global while_
+    while_ += 1
+    return while_
 
 def case(expr, Class):
     return isinstance(expr, Class)
@@ -91,6 +103,10 @@ def compile(ast, filename, _stackFrame, _closureMap):
     for frame in x86InstructionList:
         for line in x86InstructionList[frame]:
             f.write(line+"\n")
+
+    f.write(".data\n")
+    for string in stringMap:
+        f.write(string+":\n"+".string \""+stringMap[string]+"\"\n")
     f.close()
 
 
@@ -154,19 +170,31 @@ def selectInstructions(expr):
         #and assign the stepped rvalue to it.
 
         if case(expr.nodes[0], Subscript):
+            localStackFrameSize = len(varMap[currentStackFrame])+3 + depth[0]
+            depth[0] += 3
+            quickInsert(["subl $12, %esp"])
             #Get list
             subscript = expr.nodes[0]
             listName = selectInstructions(subscript.expr)
-            IntoReg("edx", listName)
+            IntoReg("eax", listName)
+            quickInsert(["movl %eax, -"+str(4*(localStackFrameSize+1))+"(%ebp)"])
 
             #Get index
             index = selectInstructions(subscript.subs[0])
-            IntoReg("ebx", index)
+            IntoReg("eax", index)
+            quickInsert(["movl %eax, -"+str(4*(localStackFrameSize+2))+"(%ebp)"])
+
             #Step on rvalue
             val = selectInstructions(expr.expr)
             IntoReg("eax", val)
+            quickInsert(["movl %eax, -"+str(4*(localStackFrameSize+3))+"(%ebp)"])
             #Future note. This may conflict if calls mutate edx
-            quickInsert(["pushl %eax", "pushl %ebx", "pushl %edx", "call set_subscript", "addl $12, %esp"])
+            quickInsert(["pushl -"+str(4*(localStackFrameSize+3))+"(%ebp)", "pushl -"+str(4*(localStackFrameSize+2))+"(%ebp)", "pushl -"+str(4*(localStackFrameSize+1))+"(%ebp)", "call set_subscript", "addl $12, %esp", "addl $12, %esp"])
+            depth[0] -= 3
+            return
+        elif case(expr.nodes[0], AssAttr):
+            #Bootstrap assattr by calling set_attr with a transformed node
+            selectInstructions(Setattr(expr.nodes[0].expr, Name(expr.nodes[0].attrname), expr.expr))
             return
         offset = requestStackLocationFor(expr.nodes[0].name)
         val = selectInstructions(expr.expr)
@@ -310,7 +338,7 @@ def selectInstructions(expr):
             quickInsert(["movl %eax, %edi", "cmpl %esi, %edi"])
             pointerNotEqual = requestJumpNumber()
             quickInsert(["jne else"+str(pointerNotEqual), "movl $1, %eax", "jmp ends"+str(final), \
-            "else"+str(pointerNotEqual)+":", "movl $0, %eax", "ends"+str(final)])
+            "else"+str(pointerNotEqual)+":", "movl $0, %eax", "ends"+str(final)+":"])
 
         return Register("eax")
 
@@ -357,7 +385,8 @@ def selectInstructions(expr):
         quickInsert(["movl $"+str(lengthOfList)+", %eax", "shl $2, %eax", "pushl %eax", \
         "call create_list", "addl $4, %esp", "or $3, %eax"])
 
-        localStackFrameSize = len(varMap[currentStackFrame])+3
+        localStackFrameSize = len(varMap[currentStackFrame])+3 + depth[0]
+        depth[0] += 3
         quickInsert(["movl %eax, -"+str(4*localStackFrameSize)+"(%ebp)"])
 
         #Get value of each element and puts in the right index
@@ -377,7 +406,7 @@ def selectInstructions(expr):
             "call set_subscript", "addl $12, %esp"])
 
         quickInsert(["movl -"+str(4*localStackFrameSize)+"(%ebp), %eax", "addl $12, %esp"])
-
+        depth[0] -= 3
         return Register("eax")
 
     #Dict
@@ -433,6 +462,7 @@ def selectInstructions(expr):
         if functionName not in varMap:
             varMap[functionName] = {}
 
+
         quickInsert([functionName+":", "pushl %ebp", "movl %esp, %ebp",\
         "subl $"+str(4*stackFrame[functionName])+", %esp"])
 
@@ -456,10 +486,10 @@ def selectInstructions(expr):
     elif case(expr, CreateClosure):
         fvs = expr.freeVars
         #Insurance
-        freedList = map(lambda x: x.name, fvs)
-        freeMap[expr.function] = freedList
-
-        val = selectInstructions(List(fvs))
+        # print fvs
+        # freedList = map(lambda x: x.name, fvs)
+        # freeMap[expr.function] = freedList
+        val = selectInstructions(fvs)
         IntoReg("eax", val)
         quickInsert(["pushl %eax","pushl $"+expr.function, \
         "call create_closure", "addl $8, %esp"])
@@ -468,14 +498,70 @@ def selectInstructions(expr):
 
     #CallFunc
     elif case(expr, CallFunc):
-        #Special case
+        #Special case getattr method call on object
+        if not case(expr.node.function, Name) and case(expr.node.function.function, Getattr):
+            expr.args.reverse()
+            count = 0
+            for i in range(0, len(expr.args)):
+                elem = selectInstructions(expr.args[i])
+                IntoReg("eax", elem)
+                quickInsert(["pushl %eax"])
+                count += 1
+
+            method = selectInstructions(expr.node)
+            IntoReg("eax", method)
+
+            quickInsert(["call *%eax", "addl $"+str(4*count)+", %esp"])
+            return Register("eax")
+
+        #Special case input
         if expr.node.function.name == 'input':
             quickInsert(["call input", "shl $2, %eax"])
             return Register("eax")
 
-        #selectInstructions(expr.node)
+        #Determine if it's a constructor or function
+        isClass = selectInstructions(expr.node.function)
+        IntoReg("esi", isClass)
+        #is_class returns 1 or 0 untagged
+        jmpNum = requestJumpNumber()
+        shortNum = requestShortNumber()
+        quickInsert(["pushl %esi", "call is_class", "cmpl $1, %eax" ,"jne else"+str(jmpNum),"addl $4, %esp"])
+        #constructor call. Move class address into eax
+        # isClass = selectInstructions(expr.node.function)
+        # IntoReg("esi", isClass)
+
+        quickInsert(["pushl %esi", "call create_object", "addl $4, %esp", "or $3, %eax"])
+        #Call init if it is existent. First save object in ebx.
+        quickInsert(["movl %eax, %ebx", "pushl $__init__", "pushl %esi", "call has_attr"])
+        #If has_Attr init call init(o) else o
+        jmpNumInit = requestJumpNumber()
+        quickInsert(["cmpl $1, %eax", "jne else"+str(jmpNumInit), "addl $8, %esp"])
+
         #Reverse argument list
         expr.args.reverse()
+        count = 0
+        if len(expr.args) == 0:
+            quickInsert(["pushl %ebx"])
+            count += 1
+        else:
+            for i in range(0, len(expr.args)-1):
+                elem = selectInstructions(expr.args[i])
+                IntoReg("eax", elem)
+                quickInsert(["pushl %eax"])
+                count += 1
+            quickInsert(["pushl %ebx"])
+            count += 1
+
+        quickInsert(["pushl $__init__", "pushl %esi", "call get_attr", "addl $8, %esp", "pushl %eax" ,"call get_function", "or $3, %eax", "movl %eax, %esi", "addl $4, %esp",\
+        "pushl %eax", "call get_free_vars", "addl $4, %esp", "pushl %eax", "pushl %esi", "call get_fun_ptr", "addl $4, %esp", "call *%eax", "addl $"+str((count)*4)+", %esp", "movl %ebx, %eax"])
+
+        quickInsert(["jmp ends"+str(shortNum)])
+        quickInsert(["else"+str(jmpNumInit)+":", "addl $8, %esp", "movl %ebx, %eax"])
+
+        quickInsert(["jmp ends"+str(shortNum)])
+        quickInsert(["else"+str(jmpNum)+":", "addl $4, %esp"])
+        #Reverse argument list
+
         count = 0
         for i in range(0, len(expr.args)):
             elem = selectInstructions(expr.args[i])
@@ -487,6 +573,7 @@ def selectInstructions(expr):
         fname = selectInstructions(expr.node)
         IntoReg("eax", fname)
         quickInsert(["call *%eax", "addl $"+str(4*count)+", %esp"])
+        quickInsert(["ends"+str(shortNum)+":"])
         return Register("eax")
     #GetFunPtr
     elif case(expr, GetFunPtr):
@@ -507,7 +594,7 @@ def selectInstructions(expr):
 
         return Register("eax")
     # ------------------ End of P2 nodes ------------------
-    # ------------------ End of P3 nodes ------------------
+    # ------------------ Start of P3 nodes ------------------
     #If
     elif case(expr, If):
         test = selectInstructions(expr.tests[0][0])
@@ -521,15 +608,77 @@ def selectInstructions(expr):
 
         # Then
         then = selectInstructions(expr.tests[0][1])
-        IntoReg("eax", then)
         quickInsert(["jmp ends"+str(final)])
 
         # Else
         quickInsert(["else"+str(testIsFalse)+":"])
         else_output = selectInstructions(expr.else_)
-        IntoReg("eax", else_output)
         quickInsert(["ends"+str(final)+":"])
+
+    #While
+    elif case(expr, While):
+        conditionOffset = 4*(len(varMap[currentFunction])+1)
+        loopBackLabelNum = requestWhileNumber()
+        shortNum = requestShortNumber()
+        #Add a space to the end of the stack
+        quickInsert(["while"+str(loopBackLabelNum)+":"])
+
+        test = selectInstructions(expr.test)
+        IntoReg("eax", test)
+
+        quickInsert(["shr $2, %eax", "cmpl $1, %eax", "jne ends"+str(shortNum)])
+        body = selectInstructions(expr.body)
+        quickInsert(["jmp while"+str(loopBackLabelNum)])
+
+        quickInsert(["ends"+str(shortNum)+":"])
+    #CreateClass
+    elif case(expr, CreateClass):
+        #Push base classes
+        base = selectInstructions(expr.parent)
+        IntoReg("eax", base)
+        quickInsert(["pushl %eax", "call create_class", "addl $4, %esp"])
         return Register("eax")
+    #SetAttr
+    elif case(expr, Setattr):
+        val = selectInstructions(expr.expr)
+        IntoReg("eax", val)
+        #Push rvalue
+        quickInsert(["pushl %eax"])
+
+        attributeCString = expr.name.name
+        #Add cstring into data section if it doesn't exist already. Then push cstring onto stack
+        if attributeCString not in stringMap:
+            stringMap[attributeCString] = attributeCString
+        quickInsert(["pushl $"+str(attributeCString)])
+
+        tmpClass = selectInstructions(expr.tmp)
+        IntoReg("eax", tmpClass)
+        quickInsert(["pushl %eax", "call set_attr"])
+        #Note that set_attr returns val upon success. Not sure if that's needed
+        #Clean up stack
+        quickInsert(["addl $12, %esp"])
+    #Getattr
+    elif case(expr, Getattr):
+        obj = selectInstructions(expr.expr)
+        IntoReg("eax", obj)
+        #Call get_attr with cstring
+        quickInsert(["pushl $"+str(expr.attrname),"pushl %eax", "call get_attr", "addl $8, %esp"])
+        return Register("eax")
+    #GetFunction
+    elif case(expr, GetFunction):
+        attr = selectInstructions(expr.function)
+        IntoReg("eax", attr)
+        #retrive the closure
+        quickInsert(["pushl %eax", "call get_function", "or $3, %eax", "addl $4, %esp"])
+        return Register("eax")
+    #GetReceiver
+    elif case(expr, GetReceiver):
+        attr = selectInstructions(expr.receiver)
+        IntoReg("eax", attr)
+        #retrive the closure
+        quickInsert(["pushl %eax", "call get_receiver", "or $3, %eax", "addl $4, %esp"])
+        return Register("eax")
+
     else:
         #pass
         raise Exception("Compile recieved an unknown ast node: "+str(expr))

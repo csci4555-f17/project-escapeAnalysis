@@ -142,26 +142,9 @@ def uniquify(n):
             nameCounter = nameCounter + 1
             functionClassNameList.append({n.name : newName})
         return Class(newName, n.bases, n.doc, uniquify(n.code))
-        
+
     elif isinstance(n, AssAttr):
-        name = n.expr.name
-        if name in nameList[len(nameList) - 1]:
-            newName = nameList[len(nameList) - 1][name]
-        else:
-            newName = name + "_" + str(nameCounter)
-            nameList[len(nameList) - 1][name] = newName
-            nameCounter = nameCounter + 1
-            functionClassNameList.append({name : newName})
-
-        if n.attrname in nameList[len(nameList) - 1]:
-            newName1 = nameList[len(nameList) - 1][n.attrname]
-        else:
-            newName1 = n.attrname + "_" + str(nameCounter)
-            nameList[len(nameList) - 1][n.attrname] = newName
-            nameCounter = nameCounter + 1
-            functionClassNameList.append({n.attrname : newName})
-
-        return AssAttr(Name(newName), newName1, n.flags)
+        return n
 
     elif isinstance(n, Getattr):
         return n
@@ -171,10 +154,3 @@ def uniquify(n):
 
     elif isinstance(n, While):
         pass
-
-'''
-ast = compiler.parseFile("/Users/rb/GoogleDrive/School/Dropbox/CSCI4555/project-escapeAnalysis/mytests/test16.py")
-
-print "Orig: "+str(ast)
-print "Uniq: "+str(uniquify(ast))
-'''

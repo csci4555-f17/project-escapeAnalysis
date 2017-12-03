@@ -1,11 +1,13 @@
 import sys
 import compiler
 from compiler.ast import *
-from Flatten import flatten
+#from Flatten import flatten
+from Flatten2 import flatten
 from explicate import entry
 from selectInstructions import compile
 from heapify import heap
 from Closure import close
+from Declassify import declassify
 
 from uniquify import uniquify
 #import parser
@@ -30,13 +32,17 @@ def main():
     #     print("./pyyc tests/test1.py")
     #     sys.exit()
 
-    #New flow ast -> flat(ast) -> heapify(ast) -> -> explicate(ast) -> compile(ast)
+    #New flow ast -> declassify(ast) -> flat(ast) -> heapify(ast) -> closure -> explicate(ast) -> compile(ast)
     #Get standard AST from file
     #ast = compiler.parseFile(argv1_str)
     name = sys.argv[1]
     ast = compiler.parseFile(name)
-    flat = flatten(ast)
     print ast
+
+    declass = declassify(ast)
+    ColorPrint(declass, RED)
+
+    flat = flatten(declass)
     ColorPrint(flat, MAGENTA)
     #heap = heapify(flat)
     #compile(flat, "test.py")

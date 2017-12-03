@@ -256,7 +256,9 @@ def explicate(expr):
         return rtn
     #CreateClosure
     elif case(expr, CreateClosure):
-        e = map(lambda x: explicate(Name(x)), expr.freeVars)
+        #Check if raw or list
+        e = map(lambda x: explicate(x), expr.freeVars)
+        e = InjectFrom('BIG', List(e))
         return InjectFrom('BIG', CreateClosure(expr.function, e))
     #GetFunPtr
     elif case(expr, GetFunPtr):
@@ -270,6 +272,24 @@ def explicate(expr):
         then = explicate(expr.tests[0][1])
         else_ = explicate(expr.else_)
         return If([(test,then)], else_)
+    #While
+    elif case(expr, While):
+        test = explicate(expr.test)
+        body = explicate(expr.body)
+        return While(test, body, None)
+    #CreateClass
+    elif case(expr, CreateClass):
+        return InjectFrom('BIG', CreateClass(explicate(expr.parent)))
+    elif case(expr, Getattr):
+        return expr
+    elif case(expr, Setattr):
+        return Setattr(expr.tmp, expr.name, explicate(expr.expr))
+    elif case(expr, AssAttr):
+        return AssAttr(explicate(expr.expr), expr.attrname, expr.flags)
+    elif case(expr, GetFunction):
+        return GetFunction(explicate(expr.function))
+    elif case(expr, GetReceiver):
+        return GetReceiver(explicate(expr.receiver))
     #Raise exception
     else:
         ColorPrint("Error: Uncaught node in explicate: "+str(expr),CYAN)

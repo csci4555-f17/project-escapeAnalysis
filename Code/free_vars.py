@@ -21,7 +21,8 @@ def free_vars(n, bounded):
         return (free_vars(n.node, bounded)[0] | free_in_args, bounded)
 
     elif isinstance(n, Lambda):
-        return (free_vars(n.code, bounded)[0] - set(n.argnames), bounded)
+        fvs = free_vars(n.code, bounded)
+        return (fvs[0] - set(n.argnames), bounded | fvs[1])
 
     elif isinstance(n, Module):
         val = free_vars(n.node, bounded)
@@ -36,7 +37,7 @@ def free_vars(n, bounded):
             bound.append(val[1])
         free_in_args = reduce(lambda a, b: a | b, ast, set([]))
         bound_in_args = reduce(lambda a, b: a | b, bound, set([]))
-        return (free_in_args, bound_in_args)
+        return (free_in_args - bound_in_args, bound_in_args)
 
     elif isinstance(n, Printnl):
         fv_args = [free_vars(e, bounded)[0] for e in n.nodes]
@@ -44,9 +45,10 @@ def free_vars(n, bounded):
         return (free_in_args, bounded)
 
     elif isinstance(n, Assign):
-        left = free_vars(n.nodes[0], bounded)[1]
-        right = free_vars(n.expr, bounded)[0]
-        return (right, left)
+        left = free_vars(n.nodes[0], bounded)
+        right = free_vars(n.expr, bounded)
+
+        return ((right[0] | left[0]) - (left[1] | right[1]), (left[1] | right[1]) | bounded)
 
     elif isinstance(n, AssName):
         return (set([]), bounded | set([n.name]))
@@ -113,7 +115,20 @@ def free_vars(n, bounded):
         then= free_vars(n.then, bounded)
         else_ = free_vars(n.else_, bounded)
         return (if_[0] | then[0] | else_[0], if_[1] | then[1] | else_[1] | bounded)
-        
+    elif isinstance(n, If):
+        if_ = free_vars(n.tests[0][0], bounded)
+        then= free_vars(n.tests[0][1], bounded)
+        else_ = free_vars(n.else_, bounded)
+        return (if_[0] | then[0] | else_[0], if_[1] | then[1] | else_[1] | bounded)
+    elif isinstance(n, While):
+        test = free_vars(n.test, bounded)
+        body = free_vars(n.body, bounded)
+        return (test[0] | body[0], test[1] | body[1] | bounded)
+    elif isinstance(n, Getattr):
+        (free, bound) = free_vars(n.expr, bounded)
+        return (free - bound, bound | bounded)
+    elif isinstance(n, AssAttr):
+        (free, bound) = free_vars(n.expr, bounded)
+        return (free - bound, bound | bounded)
     else:
-        print "free_var experienced an unknown node called: "+str(n)
-        return None
+        raise Exception("free_var experienced an unknown node called: "+str(n))
