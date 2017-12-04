@@ -1,3 +1,2 @@
-a=1
-b=2
-x=[a,b]
+def f(a):
+    return a

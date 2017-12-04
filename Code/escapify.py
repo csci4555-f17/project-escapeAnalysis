@@ -2,9 +2,11 @@ import compiler
 from compiler.ast import *
 from explicate import Bool
 from uniquify import *
+from Flatten2 import *
 
 connectionGraph = {}
-globalVars = {"inAssign": False, "objectCounter": 0, "inClass": False}
+dictOfConnectionGraphs = {}
+globalVars = {"inAssign": False, "objectCounter": 0, "inClass": False, "inReturn": False, "inFunction": False}
 classNamesToAttributes = {}
 nameList = [{}]
 functionClassNameList = []
@@ -20,7 +22,10 @@ def addToConnectionGraph(varName, val):
             connectionGraph[varName].append(val)
     else:
         connectionGraph[varName] = [val]
-    print connectionGraph
+    #print connectionGraph
+
+def finishConnectionGraphForCurrentScope(name, graph):
+    dictOfConnectionGraphs[name] = graph
 
 def createNewInstance(obj):
     name = obj + "_" + str(globalVars["objectCounter"])
@@ -53,6 +58,8 @@ def escapify(n):
         for i in range(0,len(n.nodes)):
             val = escapify(n.nodes[i])
             escapifiedStmt.append(val)
+            if i == len(n.nodes) - 1:
+                addToConnectionGraph(globalVars["inFunction"], connectionGraph)
         nameList.pop()
         return Stmt(escapifiedStmt)
 
@@ -60,6 +67,8 @@ def escapify(n):
         return Bool(escapify(n.expr))
 
     elif isinstance(n, Name):
+        if globalVars["inReturn"] != False:
+            addToConnectionGraph("return", n.name)
         return n
 
     elif isinstance(n, Add):
@@ -97,6 +106,11 @@ def escapify(n):
             globalVars["inAssign"] = n.nodes[0].name
             if globalVars["inClass"] != False:
                 classNamesToAttributes[globalVars["inClass"]].append([n.nodes[0].name, n.expr])
+            if globalVars["inFunction"] != False:
+                res = n.expr
+                if isinstance(n.expr, Name):
+                    res = n.expr.name
+                addToConnectionGraph(n.nodes[0].name, res)
         elif isinstance(n.nodes[0], AssAttr):
             globalVars["inAssign"] = n.nodes[0].expr.name
             print classNamesToAttributes
@@ -133,10 +147,13 @@ def escapify(n):
             varName = globalVars["inAssign"]
             addToConnectionGraph(varName, removedConstNodes)
 
-        return List(nodes) if len(nodes) is not 0 else List(())
+        return List(nodes) if len(nodes) is not 0 else List([])
 
     elif isinstance(n, Function):
-        return Function(n.decorators, n.name, n.argnames, n.defaults, n.flags, n.doc, escapify(n.code))
+        globalVars["inFunction"] = n.name
+        code = escapify(n.code)
+        globalVars["inFunction"] = False
+        return Function(n.decorators, n.name, n.argnames, n.defaults, n.flags, n.doc, code)
 
     elif isinstance(n, Lambda):
         return Lambda(n.argnames, [], 0, escapify(n.code))
@@ -145,7 +162,10 @@ def escapify(n):
         return IfExp(escapify(n.test), escapify(n.then), escapify(n.else_))
 
     elif isinstance(n, Return):
-        return Return(escapify(n.value))
+        globalVars["inReturn"] = True
+        ret = escapify(n.value)
+        globalVars["inReturn"] = False
+        return Return(ret)
 
     elif isinstance(n, Class):
         globalVars["inClass"] = n.name
@@ -173,8 +193,11 @@ def escapify(n):
     elif isinstance(n, While):
         return While(n.test, escapify(n.body), escapify(n.else_))
 
-ast = compiler.parseFile("/Users/rb/GoogleDrive/School/Dropbox/CSCI4555/project-escapeAnalysis/mytests/test16.py")
+ast = compiler.parseFile("/Users/rb/GoogleDrive/School/Dropbox/CSCI4555/project-escapeAnalysis/Code/mytests/test16.py")
 uniquifiedAST = uniquify(ast)
 
-print "Orig: "+str(uniquifiedAST)
-print "Escp: "+str(escapify(uniquifiedAST))
+print "Orig: " + str(uniquifiedAST)
+flattenedAST = flatten(uniquifiedAST)
+print "Flat: " + str(flattenedAST)
+print "Escp: " + str(escapify(flattenedAST))
+print "Graph: " + str(connectionGraph)
