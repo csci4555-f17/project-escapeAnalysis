@@ -1,6 +1,6 @@
 import compiler
 from compiler.ast import *
-from Declassify import CreateClass, Setattr
+from Declassify import *
 
 VARNAME = "var"
 varNameCounter = [0]
@@ -156,5 +156,6 @@ def flatten(expr):
     else:
         raise Exception("Flatten experienced an unknown node:"+str(expr))
 
-# ast = compiler.parseFile("/Users/michaeltang/Desktop/xfc.py")
-# print flatten(ast)
+#ast = compiler.parseFile("/Users/rb/GoogleDrive/School/Dropbox/CSCI4555/project-escapeAnalysis/Code/mytests/test16.py")
+#declassifiedAST = declassify(ast)
+#print flatten(declassifiedAST)

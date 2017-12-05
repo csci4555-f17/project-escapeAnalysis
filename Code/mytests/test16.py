@@ -1,2 +1,2 @@
-def f(a):
-    return a
+class C:
+    x = [1,2,3]

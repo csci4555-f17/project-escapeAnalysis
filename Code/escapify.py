@@ -3,6 +3,7 @@ from compiler.ast import *
 from explicate import Bool
 from uniquify import *
 from Flatten2 import *
+from Declassify import *
 
 connectionGraph = {}
 dictOfConnectionGraphs = {}
@@ -47,34 +48,25 @@ def escapify(n):
     global nameCounter
 
     if isinstance(n, Const):
-        return n
+        pass
 
     elif isinstance(n, Module):
-        return Module(None, escapify(n.node))
+        escapify(n.node)
 
     elif isinstance(n, Stmt):
-        nameList.append({})
-        escapifiedStmt = []
         for i in range(0,len(n.nodes)):
-            val = escapify(n.nodes[i])
-            escapifiedStmt.append(val)
-            if i == len(n.nodes) - 1:
-                addToConnectionGraph(globalVars["inFunction"], connectionGraph)
-        nameList.pop()
-        return Stmt(escapifiedStmt)
+            escapify(n.nodes[i])
 
     elif isinstance(n, Bool):
-        return Bool(escapify(n.expr))
+        pass
 
     elif isinstance(n, Name):
         if globalVars["inReturn"] != False:
             addToConnectionGraph("return", n.name)
-        return n
 
     elif isinstance(n, Add):
-        lft = escapify(n.left)
-        rgt = escapify(n.right)
-        return Add((lft, rgt))
+        escapify(n.left)
+        escapify(n.right)
 
     elif isinstance(n, CallFunc):
         # If we're creating a class.
@@ -87,19 +79,13 @@ def escapify(n):
                 addToConnectionGraph(newName, newAttributes)
                 globalVars["objectCounter"] += 1
 
-        name = escapify(n.node)
-        args = []
+        escapify(n.node)
         for i in range(0,len(n.args)):
-            val = escapify(n.args[i])
-            args.append(val)
-        return CallFunc(name, args, None, None)
+            escapify(n.args[i])
 
     elif isinstance(n, Printnl):
-        escapifiedPrintStmt = []
         for i in range(0,len(n.nodes)):
-            val = escapify(n.nodes[i])
-            escapifiedPrintStmt.append(val)
-        return Printnl(escapifiedPrintStmt,None)
+            escapify(n.nodes[i])
 
     elif isinstance(n, Assign):  
         if isinstance(n.nodes[0], AssName):
@@ -118,23 +104,22 @@ def escapify(n):
 
         else:
             raise Exception("In Assign node. Hit unhandled node case.")
-        nodes = escapify(n.nodes[0])
-        val = escapify(n.expr)
+        escapify(n.nodes[0])
+        escapify(n.expr)
         globalVars["inAssign"] = False
-        #varName = expr.nodes[0].name
-        return Assign([nodes],val)
 
     elif isinstance(n, AssName):
-        return n
+        pass
 
     elif isinstance(n, Discard):
-        return Discard(escapify(n.expr))
+        escapify(n.expr)
 
     elif isinstance(n, UnarySub):
-        return UnarySub(escapify(n.expr))
+        escapify(n.expr)
 
     elif isinstance(n, Compare):
-        return Compare(escapify(n.expr), [(n.ops[0][0], escapify(n.ops[0][1]))])
+        escapify(n.expr)
+        escapify(n.ops[0][1])
 
     elif isinstance(n, List):
         nodes = []
@@ -147,57 +132,154 @@ def escapify(n):
             varName = globalVars["inAssign"]
             addToConnectionGraph(varName, removedConstNodes)
 
-        return List(nodes) if len(nodes) is not 0 else List([])
-
     elif isinstance(n, Function):
         globalVars["inFunction"] = n.name
-        code = escapify(n.code)
+        escapify(n.code)
         globalVars["inFunction"] = False
-        return Function(n.decorators, n.name, n.argnames, n.defaults, n.flags, n.doc, code)
 
     elif isinstance(n, Lambda):
-        return Lambda(n.argnames, [], 0, escapify(n.code))
+        escapify(n.code)
 
     elif isinstance(n, IfExp):
-        return IfExp(escapify(n.test), escapify(n.then), escapify(n.else_))
+        escapify(n.test)
+        escapify(n.then)
+        escapify(n.else_)
 
     elif isinstance(n, Return):
         globalVars["inReturn"] = True
-        ret = escapify(n.value)
+        escapify(n.value)
         globalVars["inReturn"] = False
-        return Return(ret)
 
     elif isinstance(n, Class):
         globalVars["inClass"] = n.name
         if n.name not in classNamesToAttributes:
             classNamesToAttributes[n.name] = []
-        code = escapify(n.code)
+        escapify(n.code)
         globalVars["inClass"] = False
-        return Class(n.name, n.bases, n.doc, code)
         
     elif isinstance(n, AssAttr):
-
         if globalVars["inAssign"] != False:
             varName = globalVars["inAssign"]
             tmp = connectionGraph[varName][0]
             addToConnectionGraph(tmp, n.attrname)
 
+    elif isinstance(n, Getattr):
+        pass
+
+    elif isinstance(n, If):
+        escapify(n.tests[0][1])
+        escapify(n.else_)
+
+    elif isinstance(n, While):
+        escapify(n.body)
+        escapify(n.else_)
+
+def outerEscapify(n):
+    global nameDictionary
+    global nameCounter
+
+    if isinstance(n, Const):
+        return n
+
+    elif isinstance(n, Module):
+        return Module(None, outerEscapify(n.node))
+
+    elif isinstance(n, Stmt):
+        escapifiedStmt = []
+        for i in range(0,len(n.nodes)):
+            val = outerEscapify(n.nodes[i])
+            escapifiedStmt.append(val)
+        return Stmt(escapifiedStmt)
+
+    elif isinstance(n, Bool):
+        return Bool(outerEscapify(n.expr))
+
+    elif isinstance(n, Name):
+        return n
+
+    elif isinstance(n, Add):
+        lft = outerEscapify(n.left)
+        rgt = outerEscapify(n.right)
+        return Add((lft, rgt))
+
+    elif isinstance(n, CallFunc):
+        name = outerEscapify(n.node)
+        args = []
+        for i in range(0,len(n.args)):
+            val = outerEscapify(n.args[i])
+            args.append(val)
+        return CallFunc(name, args, None, None)
+
+    elif isinstance(n, Printnl):
+        escapifiedPrintStmt = []
+        for i in range(0,len(n.nodes)):
+            val = outerEscapify(n.nodes[i])
+            escapifiedPrintStmt.append(val)
+        return Printnl(escapifiedPrintStmt,None)
+
+    elif isinstance(n, Assign):  
+        nodes = outerEscapify(n.nodes[0])
+        val = outerEscapify(n.expr)
+        return Assign([nodes],val)
+
+    elif isinstance(n, AssName):
+        return n
+
+    elif isinstance(n, Discard):
+        return Discard(outerEscapify(n.expr))
+
+    elif isinstance(n, UnarySub):
+        return UnarySub(outerEscapify(n.expr))
+
+    elif isinstance(n, Compare):
+        return Compare(outerEscapify(n.expr), [(n.ops[0][0], outerEscapify(n.ops[0][1]))])
+
+    elif isinstance(n, List):
+        nodes = []
+        for node in n.nodes:
+            escapifiedNode = outerEscapify(node)
+            nodes.append(escapifiedNode)
+
+        return List(nodes) if len(nodes) is not 0 else List([])
+
+    elif isinstance(n, Function):
+        escapify(n)
+        code = outerEscapify(n.code)
+        return Function(n.decorators, n.name, n.argnames, n.defaults, n.flags, n.doc, code)
+
+    elif isinstance(n, Lambda):
+        escapify(n)
+        return Lambda(n.argnames, [], 0, outerEscapify(n.code))
+
+    elif isinstance(n, IfExp):
+        return IfExp(outerEscapify(n.test), outerEscapify(n.then), outerEscapify(n.else_))
+
+    elif isinstance(n, Return):
+        ret = outerEscapify(n.value)
+        return Return(ret)
+
+    elif isinstance(n, Class):
+        escapify(n)
+        code = outerEscapify(n.code)
+        return Class(n.name, n.bases, n.doc, code)
+        
+    elif isinstance(n, AssAttr):
         return n
 
     elif isinstance(n, Getattr):
         return n
 
     elif isinstance(n, If):
-        return If([(n.tests[0][0], escapify(n.tests[0][1]))], escapify(n.else_))
+        return If([(n.tests[0][0], outerEscapify(n.tests[0][1]))], outerEscapify(n.else_))
 
     elif isinstance(n, While):
-        return While(n.test, escapify(n.body), escapify(n.else_))
+        return While(n.test, outerEscapify(n.body), outerEscapify(n.else_))
 
 ast = compiler.parseFile("/Users/rb/GoogleDrive/School/Dropbox/CSCI4555/project-escapeAnalysis/Code/mytests/test16.py")
 uniquifiedAST = uniquify(ast)
-
 print "Orig: " + str(uniquifiedAST)
-flattenedAST = flatten(uniquifiedAST)
+declassifiedAST = declassify(uniquifiedAST)
+flattenedAST = flatten(declassifiedAST)
 print "Flat: " + str(flattenedAST)
-print "Escp: " + str(escapify(flattenedAST))
+print "Escp: " + str(outerEscapify(flattenedAST))
 print "Graph: " + str(connectionGraph)

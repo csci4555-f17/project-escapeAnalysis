@@ -129,7 +129,6 @@ def declassify(expr):
     elif case(expr, Not):
         return Not(declassify(expr.expr))
     elif case(expr, List):
-        print expr
         declassList = map(lambda x: declassify(x), expr.nodes)
         return List(declassList)
     elif case(expr, Dict):
@@ -183,3 +182,6 @@ def declassify(expr):
         return expr
     else:
         raise Exception("Declassify experienced an unknown node:"+str(expr))
+
+#ast = compiler.parseFile("/Users/rb/GoogleDrive/School/Dropbox/CSCI4555/project-escapeAnalysis/Code/mytests/test16.py")
+#print declassify(ast)
