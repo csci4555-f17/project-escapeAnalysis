@@ -3,7 +3,7 @@ from compiler.ast import *
 from explicate import Bool
 from uniquify import *
 from Flatten2 import *
-from Declassify import *
+from Declassify import declassify
 
 connectionGraph = {}
 dictOfConnectionGraphs = {}
@@ -14,8 +14,11 @@ functionClassNameList = []
 nameCounter = 0
 
 def addToConnectionGraph(varName, val):
+    print varName, val
     if isinstance(val, Const):
         val = val.value
+    if isinstance(val, List):
+        val = val.nodes
     if varName in connectionGraph and val not in connectionGraph[varName]:
         if isinstance(val, list):
             connectionGraph[varName].extend(val)
@@ -99,7 +102,6 @@ def escapify(n):
                 addToConnectionGraph(n.nodes[0].name, res)
         elif isinstance(n.nodes[0], AssAttr):
             globalVars["inAssign"] = n.nodes[0].expr.name
-            print classNamesToAttributes
             #classNamesToAttributes[]
 
         else:
@@ -126,11 +128,12 @@ def escapify(n):
         for node in n.nodes:
             escapifiedNode = escapify(node)
             nodes.append(escapifiedNode)
-        
+        '''
         if globalVars["inAssign"] != False:
             removedConstNodes = list(map(lambda x: x.value, nodes))
             varName = globalVars["inAssign"]
             addToConnectionGraph(varName, removedConstNodes)
+        '''
 
     elif isinstance(n, Function):
         globalVars["inFunction"] = n.name
@@ -269,15 +272,23 @@ def outerEscapify(n):
     elif isinstance(n, Getattr):
         return n
 
+    elif isinstance(n, Setattr):
+        return n
+
     elif isinstance(n, If):
         return If([(n.tests[0][0], outerEscapify(n.tests[0][1]))], outerEscapify(n.else_))
 
     elif isinstance(n, While):
         return While(n.test, outerEscapify(n.body), outerEscapify(n.else_))
 
+    elif isinstance(n, CreateClass):
+        return n
+
+    
+
 ast = compiler.parseFile("/Users/rb/GoogleDrive/School/Dropbox/CSCI4555/project-escapeAnalysis/Code/mytests/test16.py")
 uniquifiedAST = uniquify(ast)
-print "Orig: " + str(uniquifiedAST)
+#print "Orig: " + str(uniquifiedAST)
 declassifiedAST = declassify(uniquifiedAST)
 flattenedAST = flatten(declassifiedAST)
 print "Flat: " + str(flattenedAST)
