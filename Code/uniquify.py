@@ -144,7 +144,15 @@ def uniquify(n):
         return Class(newName, n.bases, n.doc, uniquify(n.code))
 
     elif isinstance(n, AssAttr):
-        return n
+        newExpr = uniquify(n.expr)
+        if n.attrname in nameList[len(nameList) - 1]:
+            newName = nameList[len(nameList) - 1][n.attrname]
+        else:
+            newName = n.attrname + "_" + str(nameCounter)
+            nameList[len(nameList) - 1][n.attrname] = newName
+            nameCounter = nameCounter + 1
+            functionClassNameList.append({n.attrname : newName})
+        return AssAttr(newExpr, newName, n.flags)
 
     elif isinstance(n, Getattr):
         return n
