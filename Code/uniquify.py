@@ -153,4 +153,7 @@ def uniquify(n):
         return If([(n.tests[0][0], uniquify(n.tests[0][1]))], uniquify(n.else_))
 
     elif isinstance(n, While):
-        pass
+        return While(n.test, uniquify(n.body), uniquify(n.else_))
+
+    elif isinstance(n, Subscript):
+        return Subscript(uniquify(n.expr), n.flags, n.subs)

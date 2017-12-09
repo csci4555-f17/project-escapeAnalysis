@@ -281,13 +281,18 @@ def outerEscapify(n):
     elif isinstance(n, While):
         return While(n.test, outerEscapify(n.body), outerEscapify(n.else_))
 
+    elif isinstance(n, Subscript):
+        pass
+
     elif isinstance(n, CreateClass):
         return n
 
     
 
 ast = compiler.parseFile("/Users/rb/GoogleDrive/School/Dropbox/CSCI4555/project-escapeAnalysis/Code/mytests/test16.py")
+print "orig: " + str(ast)
 uniquifiedAST = uniquify(ast)
+print "uniquified: " + str(uniquifiedAST)
 #print "Orig: " + str(uniquifiedAST)
 declassifiedAST = declassify(uniquifiedAST)
 flattenedAST = flatten(declassifiedAST)
