@@ -43,7 +43,7 @@ def flatten(expr):
     elif case(expr, Module):
         return Module(expr.doc, flatten(expr.node))
     elif case(expr, Stmt):
-        #statementStack.append([])
+        statementStack.append([])
         map(lambda x: flatten(x), expr.nodes)
         return Stmt(statementStack.pop())
     elif case(expr, Printnl):
