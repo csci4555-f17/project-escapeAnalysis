@@ -7,7 +7,7 @@ from Declassify import declassify
 
 connectionGraph = {}
 dictOfConnectionGraphs = {}
-globalVars = {"inAssign": False, "objectCounter": 0, "inClass": False, "inReturn": False, "inFunction": False}
+globalVars = {"inAssign": False, "objectCounter": 0, "inClass": False, "inReturn": False, "inFunction": False, "graphIgnore": []}
 classNamesToAttributes = {}
 nameList = [{}]
 functionClassNameList = []
@@ -15,17 +15,21 @@ nameCounter = 0
 
 def addToConnectionGraph(varName, val):
     print varName, val
-    if isinstance(val, Const):
-        val = val.value
-    if isinstance(val, List):
-        val = val.nodes
-    if varName in connectionGraph and val not in connectionGraph[varName]:
-        if isinstance(val, list):
-            connectionGraph[varName].extend(val)
+    if val not in globalVars["graphIgnore"]:
+        doNothing = False
+        if isinstance(val, Const):
+            val = val.value
+        if isinstance(val, List):
+            val = val.nodes
+        if isinstance(val, Add):
+            doNothing = True
+        if varName in connectionGraph and val not in connectionGraph[varName]:
+            if isinstance(val, list):
+                connectionGraph[varName].extend(val)
+            else:
+                connectionGraph[varName].append(val)
         else:
-            connectionGraph[varName].append(val)
-    else:
-        connectionGraph[varName] = [val]
+            connectionGraph[varName] = [val]
     #print connectionGraph
 
 def finishConnectionGraphForCurrentScope(name, graph):
@@ -51,7 +55,8 @@ def escapify(n):
     global nameCounter
 
     if isinstance(n, Const):
-        pass
+        if globalVars["inReturn"] != False:
+            addToConnectionGraph("return", n.value)
 
     elif isinstance(n, Module):
         escapify(n.node)
@@ -99,13 +104,17 @@ def escapify(n):
                 res = n.expr
                 if isinstance(n.expr, Name):
                     res = n.expr.name
-                addToConnectionGraph(n.nodes[0].name, res)
+                if isinstance(n.expr, Add): 
+                    globalVars["graphIgnore"].append(n.nodes[0].name)
+                else:
+                    addToConnectionGraph(n.nodes[0].name, res)
         elif isinstance(n.nodes[0], AssAttr):
             globalVars["inAssign"] = n.nodes[0].expr.name
             #classNamesToAttributes[]
-
+        elif isinstance(n.nodes[0], Subscript):
+            pass
         else:
-            raise Exception("In Assign node. Hit unhandled node case.")
+            raise Exception("In Assign node. Hit unhandled node case:", n)
         escapify(n.nodes[0])
         escapify(n.expr)
         globalVars["inAssign"] = False
@@ -176,6 +185,19 @@ def escapify(n):
     elif isinstance(n, While):
         escapify(n.body)
         escapify(n.else_)
+    
+    elif isinstance(n, Subscript):
+        pass
+
+
+
+
+'''
+-------------------------------------------------------
+'''
+
+
+
 
 def outerEscapify(n):
     global nameDictionary
@@ -282,7 +304,7 @@ def outerEscapify(n):
         return While(n.test, outerEscapify(n.body), outerEscapify(n.else_))
 
     elif isinstance(n, Subscript):
-        pass
+        return Subscript(uniquify(n.expr), n.flags, n.subs)
 
     elif isinstance(n, CreateClass):
         return n
