@@ -14,7 +14,7 @@ functionClassNameList = []
 nameCounter = 0
 
 def addToConnectionGraph(varName, val):
-    print varName, val
+    #print varName, val
     if val not in globalVars["graphIgnore"]:
         doNothing = False
         '''if isinstance(val, Const):
@@ -315,14 +315,15 @@ def outerEscapify(n):
 
     
 
-ast = compiler.parseFile("/Users/rb/GoogleDrive/School/Dropbox/CSCI4555/project-escapeAnalysis/Code/mytests/test16.py")
-print "orig: " + str(ast)
-uniquifiedAST = uniquify(ast)
-print "uniq: " + str(uniquifiedAST)
-#print "Orig: " + str(uniquifiedAST)
-declassifiedAST = declassify(uniquifiedAST)
-print "decl: " + str(declassifiedAST)
-flattenedAST = flatten(declassifiedAST)
-print "Flat: " + str(flattenedAST)
-print "Escp: " + str(outerEscapify(flattenedAST))
-print "Graph: " + str(connectionGraph)
+#ast = compiler.parseFile("/Users/michaeltang/Desktop/xfc.py")
+#print "orig: " + str(ast)
+#uniquifiedAST = uniquify(ast)
+#print "uniq: " + str(uniquifiedAST)
+##print "Orig: " + str(uniquifiedAST)
+#declassifiedAST = declassify(uniquifiedAST)
+#print "decl: " + str(declassifiedAST)
+#flattenedAST = flatten(declassifiedAST)
+#print "Flat: " + str(flattenedAST)
+#print "Escp: " + str(outerEscapify(flattenedAST))
+#print "Graph: " + str(connectionGraph)
+

@@ -680,8 +680,51 @@ def selectInstructions(expr):
         return Register("eax")
     # ------------------------------------- Start of P4 nodes ----------------------
     elif case(expr, StackList):
-        
-        print expr
+        length = (len(expr.expr.nodes)+1)*4
+        quickInsert(["subl $"+str(length)+", %esp"])
+        #Add size of list to the stack
+        magicNumber = 4*(stackFrame[currentStackFrame]+1)
+
+        quickInsert(["movl $"+str(len(expr.expr.nodes))+", %eax", "shl $2, %eax", "or $2, %eax", "movl %eax, -"+str(magicNumber)+"(%ebp)"])
+        for i in range(len(expr.expr.nodes)):
+            val = selectInstructions(expr.expr.nodes[i])
+            quickInsert(["movl %eax, -"+str(magicNumber+4*(i+1))+"(%ebp)"])
+
+        stackFrame[currentStackFrame] += stackFrame[currentStackFrame] + len(expr.expr.nodes) - 1
+        quickInsert(["lea -"+str(magicNumber)+"(%ebp), %eax"])
+
+        return Register("eax")
+        # # Make room for three more variables on the stack.
+        # quickInsert(["subl $12, %esp"])
+        # lengthOfList = len(expr.nodes)
+        # #Create a list of size length of list
+        # quickInsert(["movl $"+str(lengthOfList)+", %eax", "shl $2, %eax", "pushl %eax", \
+        # "call create_list", "addl $4, %esp", "or $3, %eax"])
+        #
+        # localStackFrameSize = len(varMap[currentStackFrame])+3 + depth[0]
+        # depth[0] += 3
+        # quickInsert(["movl %eax, -"+str(4*localStackFrameSize)+"(%ebp)"])
+        #
+        # #Get value of each element and puts in the right index
+        # for index in range(0, lengthOfList):
+        #     #Create an index and tag it
+        #     quickInsert(["movl $"+str(index)+", %eax", "shl $2, %eax", \
+        #     "movl %eax, -"+str(4*(localStackFrameSize+1))+"(%ebp)"])
+        #
+        #     #Step on element
+        #     val = selectInstructions(expr.nodes[index])
+        #     IntoReg("eax", val)
+        #     quickInsert(["movl %eax, -"+str(4*(localStackFrameSize+2))+"(%ebp)"])
+        #
+        #     #Push onto the stack in reverse order.
+        #     quickInsert(["pushl -"+str(4*(localStackFrameSize+2))+"(%ebp)", "pushl -"\
+        #     +str(4*(localStackFrameSize+1))+"(%ebp)", "pushl -"+str(4*localStackFrameSize)+"(%ebp)",\
+        #     "call set_subscript", "addl $12, %esp"])
+        #
+        # quickInsert(["movl -"+str(4*localStackFrameSize)+"(%ebp), %eax", "addl $12, %esp"])
+        # depth[0] -= 3
+        # return Register("eax")
+
 
 
     else:
