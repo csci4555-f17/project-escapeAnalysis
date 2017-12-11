@@ -88,6 +88,14 @@ class Let():
     def __repr__(self):
         return 'Let(%s,%s,%s)' % (self.var, self.rhs, self.body)
 
+#StackList
+class StackList():
+    def __init__(self,length,l):
+        self.length = length
+        self.expr = l
+    def __repr__(self):
+        return 'StackList(%s,%s)' % (self.length, self.expr)
+
 #TruthIdentity is a helper node for IfExp. Given a value of any type, it returns a boolean for the truthfulness of the value.
 class TruthIdentity():
     def __init__(self,expr):
@@ -95,7 +103,11 @@ class TruthIdentity():
     def __repr__(self):
         return 'TruthIdentity(%s)' % self.expr
 
-def entry(ast):
+escapeSet = set([])
+
+def entry(ast, ES):
+    global escapeSet
+    escapeSet = ES
     return (explicate(ast), stackFrame)
 #Given an ast, return explicated-ast
 def explicate(expr):
@@ -139,12 +151,21 @@ def explicate(expr):
     elif case(expr, Assign):
         stackFrame[currentFunction] += 1
         val = explicate(expr.expr)
+        nodes = explicate(expr.nodes[0])
+        #Stack allocate list.
+        #Check if val is a list
+        if case(expr.expr, List):
+            lval = expr.nodes[0].name
+            if lval not in escapeSet:
+                length = len(expr.expr.nodes)
+                return Assign([nodes], InjectFrom('STACK', StackList(InjectFrom('INT',Const(length)), val.arg)))
+
         #Bind site for lambda, subsitute name
         if case(expr.expr, Lambda):
             val = val.expr
             lambdaCounter[0] -= 1
 
-        nodes = explicate(expr.nodes[0])
+
         #varName = expr.nodes[0].name
         return Assign([nodes],val)
     #CallFunc

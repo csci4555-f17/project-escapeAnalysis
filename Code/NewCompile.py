@@ -3,7 +3,10 @@ import compiler
 from compiler.ast import *
 #from Flatten import flatten
 from Flatten2 import flatten
+from escapify import outerEscapify
+from escapify import connectionGraph
 from explicate import entry
+from ColorNodes import traverse
 from selectInstructions import compile
 from heapify import heap
 from Closure import close
@@ -44,6 +47,9 @@ def main():
 
     flat = flatten(declass)
     ColorPrint(flat, MAGENTA)
+    
+    escape = outerEscapify(flat)
+    escapeSet = traverse(connectionGraph)
     #heap = heapify(flat)
     #compile(flat, "test.py")
     heapAST = heap(flat)
@@ -52,7 +58,7 @@ def main():
     (closed, closureMap) = close(heapAST)
     ColorPrint(closed, YELLOW)
 
-    (explicit, stackFrame) = entry(closed)
+    (explicit, stackFrame) = entry(closed, escapeSet)
     #print stackFrame
     ColorPrint(explicit, GREEN)
 

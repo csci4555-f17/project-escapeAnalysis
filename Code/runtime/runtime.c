@@ -139,6 +139,12 @@ static void print_bool(int b) {
 }
 
 static void print_pyobj(pyobj x) {
+    /*Guard to check new stack printing*/
+    int* ptr = (int*)x;
+    if((*ptr & 0x3) == 0x2){
+        print_stack_list(ptr);
+        return;
+    }
     switch (tag(x)) {
         case INT_TAG:
         print_int(project_int(x));
@@ -147,7 +153,7 @@ static void print_pyobj(pyobj x) {
         print_bool(project_bool(x));
         break;
         case FLOAT_TAG:
-        print_float(project_float(x));
+        //print_float(project_float(x));
         break;
         case BIG_TAG: {
             big_pyobj* b = project_big(x);
@@ -723,7 +729,7 @@ void print_any(pyobj p) {
     print_pyobj(p);
     printf("\n");
 }
-/* Helper function to print stack allocated lists */
+
 void helper_stack_print(int pyobj){
     if((pyobj & 0x3) == 0x0){
         printf("%d",pyobj>>2);
@@ -735,11 +741,12 @@ void helper_stack_print(int pyobj){
         }
     }
 }
-/* Helper function to print stack allocated lists */
-void print_stack_list(void* l, pyobj len){
+
+void print_stack_list(int* l){
     printf("[");
     int* ptr = (int*)l;
-    
+    int len = *ptr;
+    ptr--;
     for(int i = 0; i<(len>>2)-1; i++){
         int myPyobj = *ptr;
         helper_stack_print(myPyobj);
@@ -747,7 +754,7 @@ void print_stack_list(void* l, pyobj len){
         ptr--;
     }
     helper_stack_print(*ptr);
-    printf("]\n");
+    printf("]");
 }
 
 int is_true(pyobj v)
@@ -1083,4 +1090,3 @@ pyobj error_pyobj(char* string) {
     printf(string);
     exit(-1);
 }
-

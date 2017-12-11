@@ -139,7 +139,7 @@ def selectInstructions(expr):
         TAG = 0x0
         if expr.typ == 'BOOL':
             TAG = 0x1
-        elif expr.typ == 'FLOAT':
+        elif expr.typ == 'STACK':
             TAG = 0x2
         elif expr.typ == 'BIG':
             TAG = 0x3
@@ -678,6 +678,11 @@ def selectInstructions(expr):
         #retrive the closure
         quickInsert(["pushl %eax", "call get_receiver", "or $3, %eax", "addl $4, %esp"])
         return Register("eax")
+    # ------------------------------------- Start of P4 nodes ----------------------
+    elif case(expr, StackList):
+        
+        print expr
+
 
     else:
         #pass
